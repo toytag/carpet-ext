@@ -1,0 +1,15 @@
+{
+  "required": true,
+  "package": "carpetext.mixins",
+  "compatibilityLevel": "JAVA_8",
+  "mixins": [
+    "MinecraftServer_noopMixin",
+    "ThrownEntityMixin"
+  ],
+  "client": [
+    "MinecraftClient_noopMixin"
+  ],
+  "injectors": {
+    "defaultRequire": 1
+  }
+}
