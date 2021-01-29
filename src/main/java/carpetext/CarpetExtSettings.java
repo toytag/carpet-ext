@@ -7,8 +7,7 @@ import static carpet.settings.RuleCategory.FEATURE;
 /**
  * Here is your example Settings class you can plug to use carpetmod /carpet settings command
  */
-public class CarpetExtSettings
-{
+public class CarpetExtSettings {
     public static final String EXT = "extensions";
 
     @Rule(

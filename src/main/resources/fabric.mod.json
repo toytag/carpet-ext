@@ -1,35 +1,30 @@
 {
-  "schemaVersion": 1,
-  "id": "carpet-ext",
-  "version": "1.4.0",
-
-  "name": "Custom Carpet Extensions",
-  "description": "Custom designed, adopted, and tested carpet extensions.",
-  "authors": [
-    "toytag"
-  ],
-  "contact": {
-    "homepage": "https://github.com/toytag/carpet-ext",
-    "sources": "https://github.com/toytag/carpet-ext"
-  },
-
-  "icon": "assets/modid/icon.png",
-
-  "environment": "*",
-  "entrypoints": {
-    "main": [
-    ]
-  },
-  "mixins": [
-    "carpet-ext.mixins.json"
-  ],
-
-  "depends": {
-    "fabricloader": ">=0.7.1",
-    "carpet": "*",
-    "minecraft": "1.16.x"
-  },
-  "suggests": {
-    "flamingo": "*"
-  }
+    "schemaVersion": 1,
+    "id": "carpet-ext",
+    "version": "1.0.0",
+    "name": "Custom Carpet Extensions",
+    "description": "Custom designed, adopted, and tested carpet extensions.",
+    "authors": [
+        "toytag"
+    ],
+    "contact": {
+        "homepage": "https://github.com/toytag/carpet-ext",
+        "sources": "https://github.com/toytag/carpet-ext"
+    },
+    "icon": "assets/modid/icon.png",
+    "environment": "*",
+    "entrypoints": {
+        "main": []
+    },
+    "mixins": [
+        "carpet-ext.mixins.json"
+    ],
+    "depends": {
+        "fabricloader": ">=0.7.1",
+        "carpet": "*",
+        "minecraft": "1.16.x"
+    },
+    "suggests": {
+        "flamingo": "*"
+    }
 }
