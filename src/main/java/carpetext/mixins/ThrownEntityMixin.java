@@ -19,7 +19,7 @@ public abstract class ThrownEntityMixin extends ThrownEntity {
 
     @Inject(method = "tick", at = @At("HEAD"))
     private void chunkLoadNextChunk(CallbackInfo ci) {
-        if (CarpetExtSettings.enderPearlChunkLoading) {
+        if (CarpetExtSettings.simpleEnderPearlChunkLoading) {
             ChunkUtils.loadNextChunk(this);
         }
     }

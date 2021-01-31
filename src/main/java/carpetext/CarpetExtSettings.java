@@ -2,6 +2,7 @@ package carpetext;
 
 import carpet.settings.Rule;
 
+import static carpet.settings.RuleCategory.COMMAND;
 import static carpet.settings.RuleCategory.FEATURE;
 
 /**
@@ -11,8 +12,14 @@ public class CarpetExtSettings {
     public static final String EXT = "extensions";
 
     @Rule(
-        desc = "Allow horizontally moving Ender Pearls to load chunks as entity ticking",
+        desc = "Command `/fly` for players (perticularly in survival) to enable/disable fly ability",
+        category = {COMMAND, EXT}
+    )
+    public static boolean commandFly = true;
+    
+    @Rule(
+        desc = "Allow moving Ender Pearls to load chunks as entity ticking",
         category = {FEATURE, EXT}
     )
-    public static boolean enderPearlChunkLoading = false;
+    public static boolean simpleEnderPearlChunkLoading = false;
 }

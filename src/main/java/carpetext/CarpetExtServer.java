@@ -2,6 +2,7 @@ package carpetext;
 
 import carpet.CarpetExtension;
 import carpet.CarpetServer;
+import carpetext.commands.FlyCommand;
 import com.mojang.brigadier.CommandDispatcher;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.command.ServerCommandSource;
@@ -44,6 +45,12 @@ public class CarpetExtServer implements CarpetExtension {
     @Override
     public void onTick(MinecraftServer server) {
         // maybe, maybe
+    }
+
+    @Override
+    public void registerCommands(CommandDispatcher<ServerCommandSource> dispatcher) {
+        // here goes extra stuff
+        FlyCommand.register(dispatcher);
     }
 
     @Override
