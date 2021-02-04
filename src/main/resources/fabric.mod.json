@@ -1,7 +1,7 @@
 {
     "schemaVersion": 1,
     "id": "carpet-ext",
-    "version": "1.0.0",
+    "version": "1.0.1",
     "name": "Custom Carpet Extensions",
     "description": "Custom designed, adopted, and tested carpet extensions.",
     "authors": [

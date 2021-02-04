@@ -18,8 +18,8 @@ public class CarpetExtSettings {
     public static boolean commandFly = true;
     
     @Rule(
-        desc = "Allow moving Ender Pearls to load chunks as entity ticking",
+        desc = "Allow moving Ender Pearls to load chunks and skip empty chunks as entity ticking",
         category = {FEATURE, EXT}
     )
-    public static boolean simpleEnderPearlChunkLoading = false;
+    public static boolean enderPearlChunkLoadingAndSkipping = false;
 }
