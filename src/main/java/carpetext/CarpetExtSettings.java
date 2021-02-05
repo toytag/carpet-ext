@@ -21,5 +21,5 @@ public class CarpetExtSettings {
         desc = "Allow moving Ender Pearls to load chunks and skip empty chunks as entity ticking",
         category = {FEATURE, EXT}
     )
-    public static boolean enderPearlChunkLoadingAndSkipping = false;
+    public static boolean enderPearlSkippyChunkLoading = false;
 }

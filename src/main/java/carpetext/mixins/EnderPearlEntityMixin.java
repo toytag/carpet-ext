@@ -1,17 +1,13 @@
 package carpetext.mixins;
 
-// MIXIN
-import org.spongepowered.asm.mixin.Mixin;
-import org.spongepowered.asm.mixin.injection.At;
-import org.spongepowered.asm.mixin.injection.Inject;
-import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
+// CARPET-EXT
+import carpetext.CarpetExtSettings;
 
 // JAVA
 import java.io.IOException;
 import java.util.Comparator;
 
 // MINECRAFT
-import net.minecraft.entity.Entity;
 import net.minecraft.entity.EntityType;
 import net.minecraft.entity.projectile.thrown.EnderPearlEntity;
 import net.minecraft.entity.projectile.thrown.ThrownEntity;
@@ -24,8 +20,11 @@ import net.minecraft.util.math.MathHelper;
 import net.minecraft.util.math.Vec3d;
 import net.minecraft.world.World;
 
-// CARPET-EXT
-import carpetext.CarpetExtSettings;
+// MIXIN
+import org.spongepowered.asm.mixin.Mixin;
+import org.spongepowered.asm.mixin.injection.At;
+import org.spongepowered.asm.mixin.injection.Inject;
+import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
 
 @Mixin(EnderPearlEntity.class)
@@ -33,92 +32,102 @@ public abstract class EnderPearlEntityMixin extends ThrownEntity {
     private static final ChunkTicketType<ChunkPos> ENDER_PEARL_TICKET = 
         ChunkTicketType.create("ender_pearl", Comparator.comparingLong(ChunkPos::toLong), 2);
 
-    private boolean local_sync = true;
-    private Vec3d local_pos = null;
-    private Vec3d local_velocity = null;
+    private boolean sync = true;
+    private Vec3d realPos = null;
+    private Vec3d realVelocity = null;
 
     protected EnderPearlEntityMixin(EntityType<? extends ThrownEntity> entityType, World world) {
         super(entityType, world);
     }
 
-    @Inject(method = "tick", at = @At("HEAD"))
-    private void chunkLoadNextChunk(CallbackInfo ci) {
-        if (CarpetExtSettings.enderPearlChunkLoadingAndSkipping) {
-            this.chunkLoading(this);
+    @Inject(method = "tick", at = @At(value = "HEAD"))
+    private void prepareFutureChunks(CallbackInfo ci) {
+        if (CarpetExtSettings.enderPearlSkippyChunkLoading) {
+            this.skippyChunkLoading();
         }
     }
 
-    private void chunkLoading(Entity entity) {
-        World world = entity.getEntityWorld();
-
-        Vec3d pos = entity.getPos();
-        Vec3d velocity = entity.getVelocity();
-
-        if (this.local_sync) {
-            this.local_pos = new Vec3d(pos.x, pos.y, pos.z);
-            this.local_velocity = new Vec3d(velocity.x, velocity.y, velocity.z);
-        }
-
-        // debug
-        // System.out.printf("[x: %f, y: %f, z: %f | local_x: %f, local_y: %f, local_z: %f | vx: %f, vy: %f, vz: %f | local_vx: %f, local_vy: %f, local_vz: %f]\n",
-        //     pos.x, pos.y, pos.z, this.local_pos.x, this.local_pos.y, this.local_pos.z, velocity.x, velocity.y, velocity.z, this.local_velocity.x, this.local_velocity.y, this.local_velocity.z);
-
-        ChunkPos currentChunkPos = new ChunkPos(MathHelper.floor(this.local_pos.x) >> 4,
-                MathHelper.floor(this.local_pos.z) >> 4);
-        ChunkPos nextChunkPos = new ChunkPos(MathHelper.floor(this.local_pos.x + this.local_velocity.x) >> 4,
-                MathHelper.floor(this.local_pos.z + this.local_velocity.z) >> 4);
+    private void skippyChunkLoading() {
+        World world = this.getEntityWorld();
 
         if (world instanceof ServerWorld) {
+            Vec3d currentPos = this.getPos();
+            Vec3d currentVelocity = this.getVelocity();
+            
+            if (this.sync) {
+                this.realPos = new Vec3d(currentPos.x, currentPos.y, currentPos.z);
+                this.realVelocity = new Vec3d(currentVelocity.x, currentVelocity.y, currentVelocity.z);
+            }
+            
+            // forward real pos and velocity
+            this.realPos = this.realPos.add(this.realVelocity);
+            this.realVelocity = this.realVelocity.multiply(0.99F).subtract(0, this.getGravity(), 0);
+            if (this.realPos.y <= 0) this.remove();
+            
+            // debug
+            System.out.println("current: " + currentPos + " " + currentVelocity + " real: " + realPos + " " + realVelocity);
+            
+            ChunkPos currentChunkPos = new ChunkPos(MathHelper.floor(currentPos.x) >> 4, MathHelper.floor(currentPos.z) >> 4);
+            ChunkPos realChunkPos = new ChunkPos(MathHelper.floor(this.realPos.x) >> 4, MathHelper.floor(this.realPos.z) >> 4);
+
+            // chunk loading
             ServerChunkManager serverChunkManager = ((ServerWorld) world).getChunkManager();
-            serverChunkManager.addTicket(ENDER_PEARL_TICKET, currentChunkPos, 2, currentChunkPos);
-            boolean skipNextChunkLoading = false;
-            if (this.local_velocity.length() > 1) {
+            System.out.println("shouldTickChunk(realChunkPos): " + serverChunkManager.shouldTickChunk(realChunkPos));
+            if (!serverChunkManager.shouldTickChunk(realChunkPos)) {
+                boolean shouldSkipChunkLoading = false;
                 try {
-                    CompoundTag compoundTag = serverChunkManager.threadedAnvilChunkStorage.getNbt(nextChunkPos);
-                    skipNextChunkLoading = this.shouldSkipNextChunkLoading(compoundTag);
+                    // chunk skipping
+                    CompoundTag compoundTag = serverChunkManager.threadedAnvilChunkStorage.getNbt(realChunkPos);
+                    shouldSkipChunkLoading = this.checkChunkNbtTag(compoundTag);
                 } catch (IOException e) {
-                    // Auto-generated catch block
-                    skipNextChunkLoading = true;
+                    // auto-generated catch block
+                    shouldSkipChunkLoading = true;
+                    System.out.println("getNbt IOException");
                     e.printStackTrace();
                 }
                 
                 // debug
-                // System.out.println("skipNextChunkLoading: " + skipNextChunkLoading);
-
-                if (skipNextChunkLoading) {
-                    entity.setVelocity(0, 0, 0);
-                    this.local_pos = this.local_pos.add(this.local_velocity);
-                    this.local_velocity = this.local_velocity.multiply(0.99).subtract(0, (double) this.getGravity(), 0);
-                    this.local_sync = false;
+                System.out.println("skipChunkLoading: " + shouldSkipChunkLoading);
+                
+                if (shouldSkipChunkLoading) {
+                    // stay put
+                    this.setVelocity(0, 0, 0);
+                    this.updatePosition(currentPos.x, currentPos.y, currentPos.z);
+                    serverChunkManager.addTicket(ENDER_PEARL_TICKET, currentChunkPos, 2, currentChunkPos);
+                    this.sync = false;
                 } else {
-                    entity.setPos(this.local_pos.x, this.local_pos.y, this.local_pos.z);
-                    entity.setVelocity(this.local_velocity.x, this.local_velocity.y, this.local_velocity.z);
-                    serverChunkManager.addTicket(ENDER_PEARL_TICKET, nextChunkPos, 2, nextChunkPos);
-                    this.local_sync = true;
+                    // move
+                    this.setVelocity(this.realVelocity);
+                    this.updatePosition(this.realPos.x, this.realPos.y, this.realPos.z);
+                    serverChunkManager.addTicket(ENDER_PEARL_TICKET, realChunkPos, 2, realChunkPos);
+                    this.sync = true;
+                }
+            } else {
+                if (!this.sync) {
+                    // move
+                    this.setVelocity(this.realVelocity);
+                    this.updatePosition(this.realPos.x, this.realPos.y, this.realPos.z);
+                    this.sync = true;
                 }
             }
         }
-
-        if (this.local_pos.y <= 0) {
-            this.remove();
-        }
     }
     
-    private boolean shouldSkipNextChunkLoading(CompoundTag compoundTag) {
+    private boolean checkChunkNbtTag(CompoundTag compoundTag) {
         boolean chunkStatusFull = compoundTag != null 
             && compoundTag.contains("Level", 10)
             && compoundTag.getCompound("Level").contains("Heightmaps", 10)
             && compoundTag.getCompound("Level").getCompound("Heightmaps").contains("MOTION_BLOCKING", 12);
 
         // debug
-        // System.out.println("chunkStatusFull: " + chunkStatusFull);
+        System.out.println("chunkStatusFull: " + chunkStatusFull);
         
         if (chunkStatusFull) {
             // chunk exists and has been generated before
             long[] array = compoundTag.getCompound("Level").getCompound("Heightmaps").getLongArray("MOTION_BLOCKING");
 
             // debug
-            // System.out.println("array.length: " + array.length);
+            System.out.println("array.length: " + array.length);
 
             if (array.length != 37) {
                 // should have 37 elements after vanilla 1.16
@@ -135,10 +144,10 @@ public abstract class EnderPearlEntityMixin extends ThrownEntity {
                 }
 
                 // debug
-                // System.out.println("Highest y: " + highest_y);
+                System.out.println("Highest y: " + highest_y);
 
-                // if next y pos > highest motion blocking block y pos, skip chunk loading
-                return this.local_pos.y + this.local_velocity.y > highest_y;
+                // if real y pos > highest motion blocking block y pos, skip chunk loading
+                return this.realPos.y > highest_y && this.realPos.y + this.realVelocity.y > highest_y;
             }
         } else {
             // chunk does not exists or has never been generated before
