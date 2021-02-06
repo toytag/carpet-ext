@@ -33,10 +33,12 @@ public abstract class EnderPearlEntityMixin extends ThrownItemEntity {
         ChunkTicketType.create("ender_pearl", Comparator.comparingLong(ChunkPos::toLong), 2);
     
     private boolean sync = true;
-    private Vec3d fakePos = null;
-    private Vec3d fakeVelocity = null;
+    private Vec3d currentPos = null;
+    private Vec3d currentVelocity = null;
     private Vec3d realPos = null;
     private Vec3d realVelocity = null;
+    private Vec3d nextRealPos = null;
+    private Vec3d nextRealVelocity = null;
 
     protected EnderPearlEntityMixin(EntityType<? extends ThrownItemEntity> entityType, World world) {
         super(entityType, world);
@@ -61,38 +63,41 @@ public abstract class EnderPearlEntityMixin extends ThrownItemEntity {
         World world = this.getEntityWorld();
 
         if (world instanceof ServerWorld) {
-            this.fakePos = this.getPos().add(Vec3d.ZERO);
-            this.fakeVelocity = this.getVelocity().add(Vec3d.ZERO);
+            this.currentPos = this.getPos().add(Vec3d.ZERO);
+            this.currentVelocity = this.getVelocity().add(Vec3d.ZERO);
             
             if (this.sync) {
-                this.realPos = this.fakePos.add(Vec3d.ZERO);
-                this.realVelocity = this.fakeVelocity.add(Vec3d.ZERO);
+                this.realPos = this.currentPos.add(Vec3d.ZERO);
+                this.realVelocity = this.currentVelocity.add(Vec3d.ZERO);
             }
             
-            // forward real pos and velocity
-            this.realPos = this.realPos.add(this.realVelocity);
-            this.realVelocity = this.realVelocity.multiply(0.99F).subtract(0, this.getGravity(), 0);
-            if (this.realPos.y <= 0) this.remove();
+            // next real pos
+            this.nextRealPos = this.realPos.add(this.realVelocity);
+            this.nextRealVelocity = this.realVelocity.multiply(0.99F).subtract(0, this.getGravity(), 0);
+            if (this.nextRealPos.y <= 0) this.remove();
             
             // debug
-            System.out.println("fake:" + this.fakePos + this.fakeVelocity + "real:" + this.realPos + this.realVelocity);
+            System.out.println("current: " + this.currentPos + this.currentVelocity + 
+                              " real: " + this.realPos + this.realVelocity + 
+                              " next: " + this.nextRealPos + this.nextRealVelocity);
             
-            ChunkPos fakeChunkPos = new ChunkPos(
-                MathHelper.floor(this.fakePos.x) >> 4, MathHelper.floor(this.fakePos.z) >> 4);
-            ChunkPos realChunkPos = new ChunkPos(
-                MathHelper.floor(this.realPos.x) >> 4, MathHelper.floor(this.realPos.z) >> 4);
+            // chunkPos to temporarily store pearl and real chunkPos to check chunk loading
+            ChunkPos currentChunkPos = new ChunkPos(
+                MathHelper.floor(this.currentPos.x) >> 4, MathHelper.floor(this.currentPos.z) >> 4);
+            ChunkPos nextRealChunkPos = new ChunkPos(
+                MathHelper.floor(this.nextRealPos.x) >> 4, MathHelper.floor(this.nextRealPos.z) >> 4);
 
             // chunk loading
             ServerChunkManager serverChunkManager = ((ServerWorld) world).getChunkManager();
-            System.out.println("shouldTickChunk(realChunkPos): " + serverChunkManager.shouldTickChunk(realChunkPos));
-            if (!serverChunkManager.shouldTickChunk(realChunkPos)) {
+            System.out.println("shouldTickChunk(nextChunkPos): " + serverChunkManager.shouldTickChunk(nextRealChunkPos));
+            if (!serverChunkManager.shouldTickChunk(nextRealChunkPos)) {
                 boolean shouldSkipChunkLoading = false;
                 try {
                     // chunk skipping
-                    CompoundTag compoundTag = serverChunkManager.threadedAnvilChunkStorage.getNbt(realChunkPos);
+                    CompoundTag compoundTag = serverChunkManager.threadedAnvilChunkStorage.getNbt(nextRealChunkPos);
                     shouldSkipChunkLoading = this.checkChunkNbtTag(compoundTag);
                 } catch (IOException e) {
-                    // auto-generated catch block
+                    // catch block
                     shouldSkipChunkLoading = true;
                     System.out.println("getNbt IOException");
                     e.printStackTrace();
@@ -103,11 +108,11 @@ public abstract class EnderPearlEntityMixin extends ThrownItemEntity {
                 
                 if (shouldSkipChunkLoading) {
                     // stay put (done at tick TAIL)
-                    serverChunkManager.addTicket(ENDER_PEARL_TICKET, fakeChunkPos, 2, fakeChunkPos);
+                    serverChunkManager.addTicket(ENDER_PEARL_TICKET, currentChunkPos, 2, currentChunkPos);
                     this.sync = false;
                 } else {
                     // move
-                    serverChunkManager.addTicket(ENDER_PEARL_TICKET, realChunkPos, 2, realChunkPos);
+                    serverChunkManager.addTicket(ENDER_PEARL_TICKET, nextRealChunkPos, 2, nextRealChunkPos);
                     this.setVelocity(this.realVelocity);
                     this.updatePosition(this.realPos);
                     this.sync = true;
@@ -120,6 +125,10 @@ public abstract class EnderPearlEntityMixin extends ThrownItemEntity {
                     this.sync = true;
                 }
             }
+
+            // forward real pos and velocity
+            this.realPos = this.nextRealPos;
+            this.realVelocity = this.nextRealVelocity;
         }
     }
 
@@ -130,8 +139,8 @@ public abstract class EnderPearlEntityMixin extends ThrownItemEntity {
         if (world instanceof ServerWorld) {
             if (!this.sync) {
                 System.out.println("Out of sync");
-                this.setVelocity(this.fakeVelocity);
-                this.updatePosition(this.fakePos);
+                this.setVelocity(this.currentVelocity);
+                this.updatePosition(this.currentPos);
             }
         }
     }
@@ -171,7 +180,7 @@ public abstract class EnderPearlEntityMixin extends ThrownItemEntity {
                 System.out.println("Highest y: " + highest_y);
 
                 // if real y pos > highest motion blocking block y pos, skip chunk loading
-                return this.realPos.y > highest_y && this.realPos.y + this.realVelocity.y > highest_y;
+                return this.nextRealPos.y > highest_y && this.nextRealPos.y + this.nextRealVelocity.y > highest_y;
             }
         } else {
             // chunk does not exists or has never been generated before
