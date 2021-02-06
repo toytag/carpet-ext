@@ -3,7 +3,7 @@
     "package": "carpetext.mixins",
     "compatibilityLevel": "JAVA_8",
     "mixins": [
-        "ThrownEntityMixin",
+        "EnderPearlEntityMixin",
         "MinecraftServer_noopMixin"
     ],
     "client": [

@@ -8,7 +8,6 @@ import java.io.IOException;
 import java.util.Comparator;
 
 // MINECRAFT
-import net.minecraft.entity.Entity;
 import net.minecraft.entity.EntityType;
 import net.minecraft.entity.projectile.thrown.EnderPearlEntity;
 import net.minecraft.entity.projectile.thrown.ThrownEntity;
@@ -23,33 +22,29 @@ import net.minecraft.world.World;
 
 // MIXIN
 import org.spongepowered.asm.mixin.Mixin;
-import org.spongepowered.asm.mixin.Shadow;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
 
-@Mixin(ThrownEntity.class)
-public abstract class ThrownEntityMixin extends Entity{
+@Mixin(EnderPearlEntity.class)
+public abstract class EnderPearlEntityMixin extends ThrownEntity {
     private static final ChunkTicketType<ChunkPos> ENDER_PEARL_TICKET = 
         ChunkTicketType.create("ender_pearl", Comparator.comparingLong(ChunkPos::toLong), 2);
-
+    
     private boolean sync = true;
+    private Vec3d currentPos = null;
+    private Vec3d currentVelocity = null;
     private Vec3d realPos = null;
     private Vec3d realVelocity = null;
 
-    protected ThrownEntityMixin(EntityType<? extends Entity> entityType, World world) {
+    protected EnderPearlEntityMixin(EntityType<? extends ThrownEntity> entityType, World world) {
         super(entityType, world);
     }
 
-    @Shadow
-    protected abstract float getGravity();
-
-    @Inject(method = "tick()V", at = @At(value = "INVOKE",
-            target = "Lnet/minecraft/entity/projectile/thrown/ThrownEntity;getVelocity()Lnet/minecraft/util/math/Vec3d;",
-            ordinal = 0))
-    private void prepareFutureChunks(CallbackInfo ci) {
-        if (CarpetExtSettings.enderPearlSkippyChunkLoading && ((Object) this) instanceof EnderPearlEntity) {
+    @Inject(method = "tick()V", at = @At("HEAD"))
+    private void preprocess(CallbackInfo ci) {
+        if (CarpetExtSettings.enderPearlSkippyChunkLoading) {
             this.skippyChunkLoading();
         }
     }
@@ -58,12 +53,15 @@ public abstract class ThrownEntityMixin extends Entity{
         World world = this.getEntityWorld();
 
         if (world instanceof ServerWorld) {
-            Vec3d currentPos = this.getPos();
-            Vec3d currentVelocity = this.getVelocity();
+            Vec3d pos = this.getPos();
+            Vec3d velocity = this.getVelocity();
+
+            this.currentPos = new Vec3d(pos.x, pos.y, pos.z);
+            this.currentVelocity = new Vec3d(velocity.x, velocity.y, velocity.z);
             
-            if (this.sync) {
-                this.realPos = new Vec3d(currentPos.x, currentPos.y, currentPos.z);
-                this.realVelocity = new Vec3d(currentVelocity.x, currentVelocity.y, currentVelocity.z);
+            if (sync) {
+                realPos = new Vec3d(this.currentPos.x, this.currentPos.y, this.currentPos.z);
+                realVelocity = new Vec3d(this.currentVelocity.x, this.currentVelocity.y, this.currentVelocity.z);
             }
             
             // forward real pos and velocity
@@ -72,10 +70,12 @@ public abstract class ThrownEntityMixin extends Entity{
             if (this.realPos.y <= 0) this.remove();
             
             // debug
-            System.out.println("current: " + currentPos + " " + currentVelocity + " real: " + realPos + " " + realVelocity);
+            System.out.println("current: " + this.currentPos + " " + this.currentVelocity + " real: " + realPos + " " + realVelocity);
             
-            ChunkPos currentChunkPos = new ChunkPos(MathHelper.floor(currentPos.x) >> 4, MathHelper.floor(currentPos.z) >> 4);
-            ChunkPos realChunkPos = new ChunkPos(MathHelper.floor(this.realPos.x) >> 4, MathHelper.floor(this.realPos.z) >> 4);
+            ChunkPos currentChunkPos = new ChunkPos(
+                MathHelper.floor(this.currentPos.x) >> 4, MathHelper.floor(this.currentPos.z) >> 4);
+            ChunkPos realChunkPos = new ChunkPos(
+                MathHelper.floor(this.realPos.x) >> 4, MathHelper.floor(this.realPos.z) >> 4);
 
             // chunk loading
             ServerChunkManager serverChunkManager = ((ServerWorld) world).getChunkManager();
@@ -98,8 +98,8 @@ public abstract class ThrownEntityMixin extends Entity{
                 
                 if (shouldSkipChunkLoading) {
                     // stay put
-                    this.setVelocity(0, 0, 0);
-                    this.updatePosition(currentPos.x, currentPos.y, currentPos.z);
+                    // this.setVelocity(0, 0, 0);
+                    // this.updatePosition(this.currentPos.x, this.currentPos.y, this.currentPos.z);
                     serverChunkManager.addTicket(ENDER_PEARL_TICKET, currentChunkPos, 2, currentChunkPos);
                     this.sync = false;
                 } else {
@@ -134,7 +134,7 @@ public abstract class ThrownEntityMixin extends Entity{
             long[] array = compoundTag.getCompound("Level").getCompound("Heightmaps").getLongArray("MOTION_BLOCKING");
 
             // debug
-            System.out.println("array.length: " + array.length);
+            // System.out.println("array.length: " + array.length);
 
             if (array.length != 37) {
                 // should have 37 elements after vanilla 1.16
@@ -159,6 +159,25 @@ public abstract class ThrownEntityMixin extends Entity{
         } else {
             // chunk does not exists or has never been generated before
             return true;
+        }
+    }
+
+    @Inject(method = "tick()V", at = @At("TAIL"))
+    private void postprocess(CallbackInfo ci) {
+        if (CarpetExtSettings.enderPearlSkippyChunkLoading) {
+            this.shouldStayPut();
+        }
+    }
+
+    private void shouldStayPut() {
+        World world = this.getEntityWorld();
+
+        if (world instanceof ServerWorld) {
+            if (!this.sync) {
+                System.out.println("out of sync");
+                this.setVelocity(this.currentVelocity);
+                this.updatePosition(this.currentPos.x, this.currentPos.y, this.currentPos.z);
+            }
         }
     }
 
